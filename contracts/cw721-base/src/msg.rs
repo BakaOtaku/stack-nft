@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, HumanAddr, Coin};
+use cosmwasm_std::{Binary, Coin, HumanAddr};
 use cw721::Expiration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,9 @@ pub enum HandleMsg {
         expires: Option<Expiration>,
     },
     /// Remove previously granted ApproveAll permission
-    RevokeAll { operator: HumanAddr },
+    RevokeAll {
+        operator: HumanAddr,
+    },
 
     /// Mint a new NFT, can only be called by the contract minter
     Mint(MintMsg),
@@ -61,6 +63,10 @@ pub enum HandleMsg {
     PlaceOnSell {
         token_id: String,
         price: Vec<Coin>,
+    },
+
+    BuyNFT {
+        token_id: String,
     },
 }
 

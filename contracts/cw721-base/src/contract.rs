@@ -1,19 +1,20 @@
 use cosmwasm_std::{
-    attr, to_binary, Api, Binary, BlockInfo, Deps, DepsMut, Env, HandleResponse, HumanAddr,
-    InitResponse, MessageInfo, Order, StdError, StdResult, KV, BankMsg, Coin, Context, coins
+    attr, coins, to_binary, Api, BankMsg, Binary, BlockInfo, Coin, Context, Deps, DepsMut, Env,
+    HandleResponse, HumanAddr, InitResponse, MessageInfo, Order, StdError, StdResult, KV,
 };
 
 use cw0::maybe_canonical;
 use cw2::set_contract_version;
 use cw721::{
     AllNftInfoResponse, ApprovedForAllResponse, ContractInfoResponse, Cw721ReceiveMsg, Expiration,
-    NftInfoResponse, NumTokensResponse, OwnerOfResponse, TokensResponse, 
+    NftInfoResponse, NumTokensResponse, OwnerOfResponse, TokensResponse,
 };
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InitMsg, MintMsg, MinterResponse, QueryMsg};
 use crate::state::{
-    increment_tokens, num_tokens, tokens, Approval, TokenInfo, CONTRACT_INFO, MINTER, OPERATORS, Listing, Listing_INFO,
+    increment_tokens, num_tokens, tokens, Approval, Listing, Listing_INFO, TokenInfo,
+    CONTRACT_INFO, MINTER, OPERATORS,
 };
 use cw_storage_plus::Bound;
 
@@ -65,6 +66,9 @@ pub fn handle(
         } => handle_send_nft(deps, env, info, contract, token_id, msg),
         HandleMsg::PlaceOnSell { token_id, price } => {
             execute_place_on_sell(deps, env, info, token_id, price)
+        },
+        HandleMsg::BuyNFT { token_id } => {
+            execute_buy(deps, env, info, token_id)
         }
     }
 }
@@ -97,22 +101,36 @@ pub fn execute_buy(
     // let Some(list_price) = listing_info.price_of_listing.get(&token_id);
     if let Some(owner_address) = listing_info.owner_of_listing.get(&token_id) {
         if let Some(list_price) = listing_info.price_of_listing.get(&token_id) {
+            // send buy price to owner
             res.add_message(BankMsg::Send {
-                from_address: _env.contract.address,
+                from_address: _env.contract.address.clone(),
                 to_address: deps.api.human_address(owner_address)?,
                 amount: list_price.clone(),
             });
+
+            // send NFT to the buyer
+            let mut info_contract: MessageInfo = info.clone();
+            let mut recipient: HumanAddr = info.sender.clone();
+            info_contract.sender = _env.contract.address.clone();
+            handle_transfer_nft(deps, _env, info_contract, recipient, token_id.clone());
+            Ok(HandleResponse {
+                messages: vec![],
+                attributes: vec![
+                    attr("action", "bought"),
+                    attr("buyer", info.sender),
+                    attr("token_id", token_id),
+                ],
+                data: None,
+            })
         }
+        else {
+            return Err(ContractError::Invalid{});
+        }
+    } else {
+        return Err(ContractError::Invalid{});
     }
-    Ok(HandleResponse {
-        messages: vec![],
-        attributes: vec![
-            attr("action", "bought"),
-            attr("buyer", info.sender),
-            attr("token_id", token_id),
-        ],
-        data: None,
-    })
+
+    
 }
 
 pub fn handle_mint(
@@ -462,7 +480,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => to_binary(&query_tokens(deps, owner, start_after, limit)?),
         QueryMsg::AllTokens { start_after, limit } => {
             to_binary(&query_all_tokens(deps, start_after, limit)?)
-        },
+        }
         QueryMsg::GetPrice { token_id } => to_binary(&query_price(deps, token_id)?),
     }
 }
