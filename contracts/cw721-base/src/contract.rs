@@ -14,7 +14,7 @@ use crate::error::ContractError;
 use crate::msg::{HandleMsg, InitMsg, MintMsg, MinterResponse, QueryMsg};
 use crate::state::{
     increment_tokens, num_tokens, tokens, Approval, Listing, Listing_INFO, TokenInfo,
-    CONTRACT_INFO, MINTER, OPERATORS,
+    CONTRACT_INFO, MINTER, OPERATORS, price_of_listing, owner_of_listing
 };
 use cw_storage_plus::Bound;
 
@@ -80,13 +80,14 @@ pub fn execute_place_on_sell(
     token_id: String,
     price: Vec<Coin>,
 ) -> Result<HandleResponse, ContractError> {
-    let mut listing_info: Listing = Listing_INFO.load(deps.storage)?;
-    listing_info
-        .price_of_listing
-        .insert(token_id.clone(), price);
-    Listing_INFO.save(deps.storage, &listing_info)?;
+    let owner = owner_of_listing.key(&token_id.clone().into_bytes());
+    //save canonical address of message sender who wants to sell
+    let human_to_canonical = deps.api.canonical_address(&info.sender)?;
+    owner.save(deps.storage, &human_to_canonical);
     let mut contract_address = _env.clone().contract.address;
-    handle_transfer_nft(deps, _env, info, contract_address, token_id)
+    handle_transfer_nft(deps, _env, info, contract_address, token_id.clone())
+
+    // price_of_listing.save(deps.storage, &price, &expires)?;
 }
 
 pub fn execute_buy(
@@ -95,43 +96,35 @@ pub fn execute_buy(
     info: MessageInfo,
     token_id: String,
 ) -> Result<HandleResponse, ContractError> {
-    let mut res: Context = Context::new();
-    let mut listing_info: Listing = Listing_INFO.load(deps.storage)?;
-    // let Some(owner_address) = listing_info.owner_of_listing.get(&token_id);
-    // let Some(list_price) = listing_info.price_of_listing.get(&token_id);
-    if let Some(owner_address) = listing_info.owner_of_listing.get(&token_id) {
-        if let Some(list_price) = listing_info.price_of_listing.get(&token_id) {
-            // send buy price to owner
-            res.add_message(BankMsg::Send {
-                from_address: _env.contract.address.clone(),
-                to_address: deps.api.human_address(owner_address)?,
-                amount: list_price.clone(),
-            });
+        let mut res: Context = Context::new();
+        // let mut listing_info: Listing = Listing_INFO.load(deps.storage)?;
+        // let Some(owner_address) = listing_info.owner_of_listing.get(&token_id);
+        // let Some(list_price) = listing_info.price_of_listing.get(&token_id);
 
-            // send NFT to the buyer
-            let mut info_contract: MessageInfo = info.clone();
-            let mut recipient: HumanAddr = info.sender.clone();
-            info_contract.sender = _env.contract.address.clone();
-            handle_transfer_nft(deps, _env, info_contract, recipient, token_id.clone());
-            Ok(HandleResponse {
-                messages: vec![],
-                attributes: vec![
-                    attr("action", "bought"),
-                    attr("buyer", info.sender),
-                    attr("token_id", token_id),
-                ],
-                data: None,
-            })
-        }
-        else {
-            return Err(ContractError::Invalid{});
-        }
-    } else {
-        return Err(ContractError::Invalid{});
+        // let pl = price_of_listing.may_load(deps.storage, &token_id.clone().into_bytes()).unwrap();
+        if let Some(list_price) = price_of_listing.may_load(deps.storage, &token_id.clone().into_bytes()).unwrap() {
+            if let Some(owner_address) = owner_of_listing.may_load(deps.storage, &token_id.clone().into_bytes()).unwrap() {
+                    res.add_message(BankMsg::Send {
+                        from_address: _env.contract.address.clone(),
+                        to_address: deps.api.human_address(&owner_address)?,
+                        amount: list_price.clone(),
+                    });
+                    let mut info_contract: MessageInfo = info.clone();
+                    let mut recipient: HumanAddr = info.sender.clone();
+                    info_contract.sender = _env.contract.address.clone();
+                    handle_transfer_nft(deps, _env, info_contract, recipient, token_id.clone());
+                    Ok(HandleResponse {
+                        messages: vec![],
+                        attributes: vec![
+                            attr("action", "bought"),
+                            attr("buyer", info.sender),
+                            attr("token_id", token_id),
+                        ],
+                        data: None,
+                    })
+            } else {return Err(ContractError::Invalid{});}
+        } else {return Err(ContractError::Invalid{});}
     }
-
-    
-}
 
 pub fn handle_mint(
     deps: DepsMut,
@@ -486,10 +479,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 fn query_price(deps: Deps, token_id: String) -> StdResult<Vec<Coin>> {
-    let mut listing_info: Listing = Listing_INFO.load(deps.storage)?;
-    if let Some(value) = listing_info.price_of_listing.get(&token_id) {
-        Ok(value.clone())
-    } else {
+    if let Some(list_price) = price_of_listing.may_load(deps.storage, &token_id.clone().into_bytes()).unwrap() {
+        Ok(list_price.clone())
+    } else { 
         Ok(coins(0, "none"))
     }
 }

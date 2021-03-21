@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Coin, StdResult, Storage};
+use cosmwasm_std::{CanonicalAddr, Coin, StdResult, Storage, Attribute};
 use cw721::{ContractInfoResponse, Expiration};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 use std::collections::HashMap;
@@ -23,9 +23,12 @@ pub struct TokenInfo {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct Listing {
-    pub price_of_listing: HashMap<String, Vec<Coin>>,
-    pub owner_of_listing: HashMap<String, CanonicalAddr>,
+    
+    // pub owner_of_listing: HashMap<String, CanonicalAddr>,
+    
 }
+pub const price_of_listing: Map<&[u8], Vec<Coin>> = Map::new("price_of_listing");
+pub const owner_of_listing: Map<&[u8], CanonicalAddr> = Map::new("owner_of_listing");
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct Approval {
