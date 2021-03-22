@@ -59,7 +59,7 @@ async function generatewallet(){
     print(data)
     print(coin)
     print(client)
-    var filepath="/home/aniket/Documents/cosmos_gitmony/gitmony/nameservice/artifacts/cw_nameservice.wasm"
+    var filepath="./artifacts/cw721_base.wasm"
     const result=await uploadcode(filepath,client,address);
     // print(result)
     print(result.codeId)
@@ -163,9 +163,9 @@ async function interaction(){
 
 
 
-// generatewallet();
+generatewallet();
 // loadwalletrun()
-interaction();
+// interaction();
 // print(newdata)
 
 
